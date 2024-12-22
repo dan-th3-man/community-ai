@@ -42,6 +42,13 @@ export class TranscriptionService
         this.runtime = _runtime;
         const deepgramKey = this.runtime.getSetting("DEEPGRAM_API_KEY");
         this.deepgram = deepgramKey ? createClient(deepgramKey) : null;
+
+        // Initialize OpenAI if API key is available
+        if (this.runtime.getSetting("OPENAI_API_KEY")) {
+            this.openai = new OpenAI({
+                apiKey: this.runtime.getSetting("OPENAI_API_KEY"),
+            });
+        }
     }
 
     constructor() {
@@ -51,15 +58,6 @@ export class TranscriptionService
         this.DEBUG_AUDIO_DIR = path.join(rootDir, "debug_audio");
         this.ensureCacheDirectoryExists();
         this.ensureDebugDirectoryExists();
-        // TODO: It'd be nice to handle this more gracefully, but we can do local transcription for now
-        // TODO: remove the runtime from here, use it when called
-        // if (runtime.getSetting("OPENAI_API_KEY")) {
-        //     this.openai = new OpenAI({
-        //         apiKey: runtime.getSetting("OPENAI_API_KEY"),
-        //     });
-        // } else {
-        //     this.detectCuda();
-        // }
     }
 
     private ensureCacheDirectoryExists() {
@@ -201,10 +199,12 @@ export class TranscriptionService
         while (this.queue.length > 0) {
             const { audioBuffer, resolve } = this.queue.shift()!;
             let result: string | null = null;
-            if (this.deepgram) {
-                result = await this.transcribeWithDeepgram(audioBuffer);
-            } else if (this.openai) {
+
+            // Prioritize OpenAI if available
+            if (this.openai) {
                 result = await this.transcribeWithOpenAI(audioBuffer);
+            } else if (this.deepgram) {
+                result = await this.transcribeWithDeepgram(audioBuffer);
             } else {
                 result = await this.transcribeLocally(audioBuffer);
             }
