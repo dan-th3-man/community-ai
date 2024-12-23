@@ -11,7 +11,7 @@ import { ethers } from "ethers";
 import { socialToWalletProvider } from "../providers/socialToWallet";
 
 // Export the class from a separate file
-class RewardAction {
+export class RewardAction {
     constructor(private privateKey: string) {}
 
     async reward(walletAddress: string, amount: number): Promise<any> {
