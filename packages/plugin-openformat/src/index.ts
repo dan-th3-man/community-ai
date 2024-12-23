@@ -1,10 +1,11 @@
 import { Plugin } from "@ai16z/eliza";
 import { rewardAction } from "./actions/rewardPoints";
-import { emojiRewardAction } from "./actions/emojiRewards";
+import { badgeRewardAction } from "./actions/rewardBadges";
+//import { emojiRewardAction } from "./actions/emojiRewards";
 import { userProfileProvider } from "./providers/userProfile";
 import { evmWalletProvider } from "./providers/wallet";
 import { tierEvaluator } from "./evaluators/tiers";
-import { contributionEvaluator } from "./evaluators/contributions";
+//import { contributionEvaluator } from "./evaluators/contributions";
 
 // Export individual modules
 export * from "./actions";
@@ -17,8 +18,8 @@ export const openformatPlugin: Plugin = {
     name: "openformat",
     description: "Openformat plugin",
     providers: [userProfileProvider, evmWalletProvider],
-    actions: [rewardAction, emojiRewardAction],
-    evaluators: [tierEvaluator, contributionEvaluator],
+    actions: [rewardAction, badgeRewardAction],
+    evaluators: [tierEvaluator],
 };
 
 export default openformatPlugin;
