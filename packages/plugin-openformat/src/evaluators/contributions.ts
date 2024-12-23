@@ -130,6 +130,13 @@ async function handler(
             return false;
         }
 
+        // Get platform from message source
+        const platform = message.content?.source || "discord";
+        console.log("Platform detection:", {
+            messageSource: message.content?.source,
+            defaultedTo: platform
+        });
+
         // Get user's wallet address
         const walletProvider = socialToWalletProvider.get;
         const providerResponse = await walletProvider(runtime, message, state);
@@ -143,6 +150,12 @@ async function handler(
         const walletAddress = match?.[1];
 
         if (!walletAddress) {
+            if (callback) {
+                const connectUrl = "https://ai-agent-privy.vercel.app/";
+                callback({
+                    text: `Please connect your ${platform} account to earn points. You can do it here: ${connectUrl}`,
+                });
+            }
             console.log("Could not extract wallet address");
             return false;
         }
@@ -159,7 +172,7 @@ async function handler(
             const account = await runtime.databaseAdapter.getAccountById(message.userId);
             const username = account?.username || "User";
 
-            let responseText = `🌟 ${username} earned ${contribution.suggestedPoints} points for their ${contribution.significance} contribution!\n`;
+            let responseText = `🌟 ${username} earned ${contribution.suggestedPoints} points on ${platform} for their ${contribution.significance} contribution!\n`;
             responseText += `Type: ${contribution.contributionType}\n`;
 
             if (contribution.significance === "high") {
@@ -182,6 +195,7 @@ async function handler(
                     type: contribution.contributionType,
                     significance: contribution.significance,
                     recipient: walletAddress,
+                    platform: platform
                 },
             });
         }
@@ -197,22 +211,13 @@ async function handler(
 export const contributionEvaluator: Evaluator = {
     name: "EVALUATE_CONTRIBUTION",
     description: "Evaluates and rewards meaningful community contributions",
-
-    // Add similes for the evaluator
-    similes: [
-        "EVALUATE_CONTRIBUTION",
-        "CHECK_CONTRIBUTION",
-        "ASSESS_CONTRIBUTION",
-        "REVIEW_MESSAGE",
-        "CHECK_MESSAGE_VALUE",
-        "EVALUATE_MESSAGE"
-    ],
-
+    handler,
     validate: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
         // Add debug logging
         console.log("Validating contribution for message:", {
             userId: message.userId,
             content: message.content?.text?.substring(0, 100),
+            platform: message.content?.source,
             hasRequiredSettings: !!(
                 runtime.getSetting("EVM_PRIVATE_KEY") &&
                 runtime.getSetting("OPENFORMAT_DAPP_ID") &&
@@ -221,7 +226,6 @@ export const contributionEvaluator: Evaluator = {
         });
 
         // Only run for user messages (not system or bot) and ensure required settings exist
-        // Check if it's a user message by verifying it's not from the agent
         return message.userId !== runtime.agentId &&
                message.content?.text != null &&  // Make sure there's actual message content
                !!(
@@ -230,11 +234,15 @@ export const contributionEvaluator: Evaluator = {
                     runtime.getSetting("OPENFORMAT_API_KEY")
                 );
     },
-
-    handler,
-
     alwaysRun: true,
-
+    similes: [
+        "EVALUATE_CONTRIBUTION",
+        "CHECK_CONTRIBUTION",
+        "ASSESS_CONTRIBUTION",
+        "REVIEW_MESSAGE",
+        "CHECK_MESSAGE_VALUE",
+        "EVALUATE_MESSAGE"
+    ],
     examples: [
         {
             context: "User provides comprehensive solution with custom tutorial",

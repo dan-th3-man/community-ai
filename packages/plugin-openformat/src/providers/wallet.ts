@@ -219,7 +219,7 @@ export const evmWalletProvider: Provider = {
             const address = walletProvider.getAddress();
             const balance = await walletProvider.getWalletBalance();
             const chain = walletProvider.getCurrentChain();
-            return `EVM Wallet Address: ${address}\nBalance: ${balance} ${chain.nativeCurrency.symbol}\nChain ID: ${chain.id}, Name: ${chain.name}`;
+            return `# Important information about ${runtime.character.name}'s EVM Wallet\n EVM Wallet Address is: ${address}\n EVM Wallet Balance is: ${balance} ${chain.nativeCurrency.symbol}\n EVM Wallet Chain ID is: ${chain.id}, Name: ${chain.name}`;
         } catch (error) {
             console.error("Error in EVM wallet provider:", error);
             return null;

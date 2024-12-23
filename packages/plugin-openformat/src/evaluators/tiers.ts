@@ -44,6 +44,13 @@ async function handler(
         const currentPoints = parseInt(pointsMatch[1]);
         console.log("Current points:", currentPoints);
 
+        // Get platform from message source
+        const platform = message.content?.source || "discord";
+        console.log("Platform detection:", {
+            messageSource: message.content?.source,
+            defaultedTo: platform
+        });
+
         // Update regex to handle the new markdown format with badges section
         const badgesMatch = profileData.match(
             /## Badges\n.*?collected \d+ badges: (\[.*?\])/s
@@ -103,7 +110,14 @@ async function handler(
 
         if (!walletAddress) {
             console.log("Could not find wallet address");
-            return;
+            return {
+                text: `Please connect your ${platform} account to receive tier badges. You can do it here: https://ai-agent-privy.vercel.app/`,
+                content: {
+                    success: false,
+                    error: "No wallet connected",
+                    platform: platform
+                }
+            };
         }
 
         // Award the badge
@@ -119,17 +133,19 @@ async function handler(
             tier: eligibleTier.name,
             badge: tierBadge.name,
             transaction: result.hash,
+            platform: platform
         });
 
         // Create response message
         const response = {
-            text: `🎉 Congratulations! You've reached the ${eligibleTier.name} tier! You have been awarded the ${eligibleTier.name} badge.\n\nThis badge represents your achievement of earning ${eligibleTier.points_required} XP points. Keep engaging to reach the next tier!\n\nView your badge transaction: ${result.blockExplorerUrl}`,
+            text: `🎉 Congratulations! You've reached the ${eligibleTier.name} tier on ${platform}! You have been awarded the ${eligibleTier.name} badge.\n\nThis badge represents your achievement of earning ${eligibleTier.points_required} XP points. Keep engaging to reach the next tier!\n\nView your badge transaction: ${result.blockExplorerUrl}`,
             content: {
                 success: true,
                 tier: eligibleTier.name,
                 points_required: eligibleTier.points_required,
                 transaction: result.hash,
                 blockExplorerUrl: result.blockExplorerUrl,
+                platform: platform
             },
         };
 
@@ -152,32 +168,55 @@ async function handler(
 export const tierEvaluator: Evaluator = {
     name: "CHECK_USER_TIER",
     description: "Checks user's points and awards tier badges when thresholds are reached",
-    similes: ["CHECK_TIER", "EVALUATE_TIER", "CHECK_RANK", "TIER_CHECK"],
+    similes: ["CHECK_TIER", "EVALUATE_TIER", "CHECK_RANK", "TIER_CHECK", "GET_TIER", "SHOW_TIER", "CHECK_LEVEL", "SHOW_RANK"],
 
     validate: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
-        // Only run for profile information messages
+        // Add debug logging to understand what's being checked
+        console.log("Tier evaluator validation details:", {
+            messageText: message.content?.text?.substring(0, 100),
+            hasRequiredSettings: !!(
+                runtime.getSetting("EVM_PRIVATE_KEY") &&
+                runtime.getSetting("OPENFORMAT_DAPP_ID") &&
+                runtime.getSetting("OPENFORMAT_API_KEY")
+            ),
+            messageType: message.userId,
+            messageSource: message.content?.source,
+            isPointsUpdate: message.content?.text?.includes("reward_interaction"),
+            isProfileInfo: message.content?.text?.includes("# Additional Information about"),
+            isTierQuery: message.content?.text?.toLowerCase().match(/tier|rank|level|badge/),
+        });
+
+        // Check various trigger conditions
         const isProfileInfo = message.content?.text?.includes("# Additional Information about");
+        const isTierQuery = message.content?.text?.toLowerCase().match(/tier|rank|level|badge/);
+        const isPointsUpdate = message.content?.text?.includes("reward_interaction");
+        const isContributionReward = message.content?.text?.includes("earned") && message.content?.text?.includes("points");
+
+        // Check if we have all required settings
         const hasRequiredSettings = !!(
             runtime.getSetting("EVM_PRIVATE_KEY") &&
             runtime.getSetting("OPENFORMAT_DAPP_ID") &&
             runtime.getSetting("OPENFORMAT_API_KEY")
         );
 
-        console.log("Tier evaluator validation:", {
+        // Log the final validation result
+        const shouldRun = (isProfileInfo || isTierQuery || isPointsUpdate || isContributionReward) && hasRequiredSettings;
+        console.log("Tier evaluator should run:", shouldRun, {
             isProfileInfo,
+            isTierQuery,
+            isPointsUpdate,
+            isContributionReward,
             hasRequiredSettings,
-            messageType: message.userId,
-            contentStart: message.content?.text?.substring(0, 50)
+            messageText: message.content?.text
         });
 
-        return isProfileInfo && hasRequiredSettings;
+        return shouldRun;
     },
 
     handler,
 
-
-    // Set to false so it only runs when explicitly triggered
-    alwaysRun: false,
+    // Consider setting this to true since we want to catch all point updates
+    alwaysRun: true,
 
     examples: [
         {

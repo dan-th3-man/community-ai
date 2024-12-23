@@ -200,6 +200,13 @@ export const badgeRewardAction = {
                 return false;
             }
 
+            // Get platform from message source
+            const platform = message.content?.source || "discord";
+            console.log("Platform detection:", {
+                messageSource: message.content?.source,
+                defaultedTo: platform
+            });
+
             // Get wallet address using the provider
             const walletProvider = socialToWalletProvider.get;
             const providerResponse = await walletProvider(runtime, message, state);
@@ -212,8 +219,9 @@ export const badgeRewardAction = {
 
             if (!walletAddress) {
                 if (callback) {
+                    const connectUrl = "https://ai-agent-privy.vercel.app/";
                     callback({
-                        text: "Please connect your discord to earn badges. You can do it here: https://ai-agent-privy.vercel.app/",
+                        text: `Please connect your ${platform} to earn badges. You can do it here: ${connectUrl}`,
                     });
                 }
                 return false;
@@ -224,13 +232,14 @@ export const badgeRewardAction = {
 
             if (callback) {
                 callback({
-                    text: `Successfully awarded the ${rewardDetails.badgeName} badge! View transaction: ${result.blockExplorerUrl}`,
+                    text: `Successfully awarded the ${rewardDetails.badgeName} badge on ${platform}! View transaction: ${result.blockExplorerUrl}`,
                     content: {
                         success: true,
                         hash: result.hash,
                         blockExplorerUrl: result.blockExplorerUrl,
                         badge: rewardDetails.badgeName,
                         recipient: walletAddress,
+                        platform: platform
                     },
                 });
             }

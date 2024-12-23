@@ -4,7 +4,7 @@ import {
     HandlerCallback,
     ModelClass,
     type IAgentRuntime,
-    type Memory,
+    type Memory as BaseMemory,
     type State,
 } from "@ai16z/eliza";
 import { ethers } from "ethers";
@@ -172,7 +172,7 @@ export const rewardAction = {
     description: "Rewards points to users through OpenFormat",
     handler: async (
         runtime: IAgentRuntime,
-        message: Memory,
+        message: BaseMemory,
         state: State,
         _options: any,
         callback?: HandlerCallback
@@ -187,6 +187,13 @@ export const rewardAction = {
             if (!rewardDetails.shouldReward) {
                 return false;
             }
+
+            // Get platform from message source
+            const platform = message.content?.source || "discord";
+            console.log("Platform detection:", {
+                messageSource: message.content?.source,
+                defaultedTo: platform
+            });
 
             // Get wallet address using the provider directly
             const walletProvider = socialToWalletProvider.get;
@@ -206,8 +213,9 @@ export const rewardAction = {
 
             if (!walletAddress) {
                 if (callback) {
+                    const connectUrl = "https://ai-agent-privy.vercel.app/";
                     callback({
-                        text: "Please connect your discord to earn points. You can do it here: https://ai-agent-privy.vercel.app/",
+                        text: `Please connect your ${platform} to earn points. You can do it here: ${connectUrl}`,
                     });
                 }
                 return false;
@@ -224,13 +232,14 @@ export const rewardAction = {
 
             if (callback) {
                 callback({
-                    text: `Successfully rewarded ${rewardDetails.amount} points! View transaction: ${result.blockExplorerUrl}`,
+                    text: `Successfully rewarded ${rewardDetails.amount} points on ${platform}! View transaction: ${result.blockExplorerUrl}`,
                     content: {
                         success: true,
                         hash: result.hash,
                         blockExplorerUrl: result.blockExplorerUrl,
                         amount: rewardDetails.amount,
                         recipient: walletAddress,
+                        platform: platform
                     },
                 });
             }
