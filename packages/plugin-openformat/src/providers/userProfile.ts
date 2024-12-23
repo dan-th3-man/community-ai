@@ -61,7 +61,7 @@ function formatProfileResponse(data: ProfileResponse, username: string): string 
 
     // Add wallet info (this will be prepended with the actual address later)
     parts.push('## Wallet');
-    parts.push('Connected Wallet Address: {{wallet_address}}');
+    parts.push(`${username}'s Connected Wallet Address: {{wallet_address}}`);
     parts.push('');
 
     // Add XP/Points info
@@ -87,7 +87,7 @@ function formatProfileResponse(data: ProfileResponse, username: string): string 
     if (data.data.completed_actions.length > 0) {
         const sortedActions = data.data.completed_actions
             .sort((a, b) => parseInt(b.createdAt) - parseInt(a.createdAt))
-            .slice(0, 3)
+            .slice(0, 10)
             .map(action => `${action.name} (${action.xp_rewarded} XP, ${formatTimestamp(action.createdAt)})`);
 
         parts.push(`Their recent actions include: ${sortedActions.join(", ")}`);
