@@ -151,22 +151,33 @@ async function handler(
 
 export const tierEvaluator: Evaluator = {
     name: "CHECK_USER_TIER",
-    description:
-        "Checks user's points and awards tier badges when thresholds are reached",
-    similes: ["CHECK_TIER", "EVALUATE_TIER", "CHECK_RANK"],
+    description: "Checks user's points and awards tier badges when thresholds are reached",
+    similes: ["CHECK_TIER", "EVALUATE_TIER", "CHECK_RANK", "TIER_CHECK"],
 
-    validate: async (runtime: IAgentRuntime): Promise<boolean> => {
-        console.log("Validating tier evaluator");
+    validate: async (runtime: IAgentRuntime, message: Memory): Promise<boolean> => {
+        // Only run for profile information messages
+        const isProfileInfo = message.content?.text?.includes("# Additional Information about");
         const hasRequiredSettings = !!(
             runtime.getSetting("EVM_PRIVATE_KEY") &&
             runtime.getSetting("OPENFORMAT_DAPP_ID") &&
             runtime.getSetting("OPENFORMAT_API_KEY")
         );
-        console.log("Has required settings:", hasRequiredSettings);
-        return hasRequiredSettings;
+
+        console.log("Tier evaluator validation:", {
+            isProfileInfo,
+            hasRequiredSettings,
+            messageType: message.userId,
+            contentStart: message.content?.text?.substring(0, 50)
+        });
+
+        return isProfileInfo && hasRequiredSettings;
     },
 
     handler,
+
+
+    // Set to false so it only runs when explicitly triggered
+    alwaysRun: false,
 
     examples: [
         {
@@ -229,5 +240,5 @@ export const tierEvaluator: Evaluator = {
             ],
             outcome: "No new tier badges to award",
         },
-    ],
+    ]
 };
