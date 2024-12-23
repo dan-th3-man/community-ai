@@ -4,6 +4,7 @@ import { emojiRewardAction } from "./actions/emojiRewards";
 import { socialToWalletProvider } from "./providers/socialToWallet";
 import { userProfileProvider } from "./providers/userProfile";
 import { tierEvaluator } from "./evaluators/tiers";
+import { contributionEvaluator } from "./evaluators/contributions";
 
 // Export individual modules
 export * from "./actions";
@@ -23,7 +24,8 @@ export const openformatPlugin: Plugin = {
         emojiRewardAction
     ],
     evaluators: [
-        tierEvaluator
+        tierEvaluator,
+        contributionEvaluator
     ],
 };
 
