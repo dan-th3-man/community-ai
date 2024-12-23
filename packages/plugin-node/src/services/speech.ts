@@ -38,33 +38,31 @@ async function getVoiceSettings(runtime: IAgentRuntime) {
     const hasElevenLabs = !!runtime.getSetting("ELEVENLABS_XI_API_KEY");
     const useVits = !hasElevenLabs;
 
-    // Get voice settings from character card
-    const voiceSettings = runtime.character.settings?.voice;
-    const elevenlabsSettings = voiceSettings?.elevenlabs;
-
+    // Add debug logging
+    elizaLogger.debug("ElevenLabs API Key:", !!runtime.getSetting("ELEVENLABS_XI_API_KEY"));
     elizaLogger.debug("Voice settings:", {
         hasElevenLabs,
         useVits,
-        voiceSettings,
-        elevenlabsSettings,
+        voiceSettings: runtime.character.settings?.voice,
+        elevenlabsSettings: runtime.character.settings?.voice?.elevenlabs,
     });
 
     return {
         elevenlabsVoiceId:
-            elevenlabsSettings?.voiceId ||
+            runtime.character.settings?.voice?.elevenlabs?.voiceId ||
             runtime.getSetting("ELEVENLABS_VOICE_ID"),
         elevenlabsModel:
-            elevenlabsSettings?.model ||
+            runtime.character.settings?.voice?.elevenlabs?.model ||
             runtime.getSetting("ELEVENLABS_MODEL_ID") ||
             "eleven_monolingual_v1",
         elevenlabsStability:
-            elevenlabsSettings?.stability ||
+            runtime.character.settings?.voice?.elevenlabs?.stability ||
             runtime.getSetting("ELEVENLABS_VOICE_STABILITY") ||
             "0.5",
         // ... other ElevenLabs settings ...
         vitsVoice:
-            voiceSettings?.model ||
-            voiceSettings?.url ||
+            runtime.character.settings?.voice?.model ||
+            runtime.character.settings?.voice?.url ||
             runtime.getSetting("VITS_VOICE") ||
             "en_US-hfc_female-medium",
         useVits,
@@ -88,128 +86,35 @@ async function textToSpeech(runtime: IAgentRuntime, text: string) {
                     model_id: runtime.getSetting("ELEVENLABS_MODEL_ID"),
                     text: text,
                     voice_settings: {
-                        similarity_boost: runtime.getSetting(
-                            "ELEVENLABS_VOICE_SIMILARITY_BOOST"
-                        ),
-                        stability: runtime.getSetting(
-                            "ELEVENLABS_VOICE_STABILITY"
-                        ),
+                        similarity_boost: runtime.getSetting("ELEVENLABS_VOICE_SIMILARITY_BOOST"),
+                        stability: runtime.getSetting("ELEVENLABS_VOICE_STABILITY"),
                         style: runtime.getSetting("ELEVENLABS_VOICE_STYLE"),
-                        use_speaker_boost: runtime.getSetting(
-                            "ELEVENLABS_VOICE_USE_SPEAKER_BOOST"
-                        ),
+                        use_speaker_boost: runtime.getSetting("ELEVENLABS_VOICE_USE_SPEAKER_BOOST"),
                     },
                 }),
             }
         );
 
-        const status = response.status;
-        if (status != 200) {
+        if (!response.ok) {
             const errorBodyString = await response.text();
-            const errorBody = JSON.parse(errorBodyString);
-
-            // Check for quota exceeded error
-            if (
-                status === 401 &&
-                errorBody.detail?.status === "quota_exceeded"
-            ) {
-                console.log("ElevenLabs quota exceeded, falling back to VITS");
-                throw new Error("QUOTA_EXCEEDED");
-            }
-
-            throw new Error(
-                `Received status ${status} from Eleven Labs API: ${errorBodyString}`
-            );
+            throw new Error(`Received status ${response.status} from Eleven Labs API: ${errorBodyString}`);
         }
 
-        if (response) {
-            const reader = response.body?.getReader();
-            const readable = new Readable({
-                read() {
-                    reader && // eslint-disable-line
-                        reader.read().then(({ done, value }) => {
-                            if (done) {
-                                this.push(null);
-                            } else {
-                                this.push(value);
-                            }
-                        });
-                },
-            });
+        // Create a readable stream from the response body
+        const readable = new Readable();
+        const buffer = await response.arrayBuffer();
+        readable.push(Buffer.from(buffer));
+        readable.push(null);
 
-            if (
-                runtime
-                    .getSetting("ELEVENLABS_OUTPUT_FORMAT")
-                    .startsWith("pcm_")
-            ) {
-                const sampleRate = parseInt(
-                    runtime.getSetting("ELEVENLABS_OUTPUT_FORMAT").substring(4)
-                );
-                const withHeader = prependWavHeader(
-                    readable,
-                    1024 * 1024 * 100,
-                    sampleRate,
-                    1,
-                    16
-                );
-                return withHeader;
-            } else {
-                return readable;
-            }
-        } else {
-            return new Readable({
-                read() {},
-            });
+        if (runtime.getSetting("ELEVENLABS_OUTPUT_FORMAT").startsWith("pcm_")) {
+            const sampleRate = parseInt(runtime.getSetting("ELEVENLABS_OUTPUT_FORMAT").substring(4));
+            return prependWavHeader(readable, buffer.byteLength, sampleRate, 1, 16);
         }
+
+        return readable;
     } catch (error) {
-        if (error.message === "QUOTA_EXCEEDED") {
-            // Fall back to VITS
-            const { vitsVoice } = await getVoiceSettings(runtime);
-            const { audio } = await Echogarden.synthesize(text, {
-                engine: "vits",
-                voice: vitsVoice,
-            });
-
-            let wavStream: Readable;
-            if (audio instanceof Buffer) {
-                console.log("audio is a buffer");
-                wavStream = Readable.from(audio);
-            } else if ("audioChannels" in audio && "sampleRate" in audio) {
-                console.log("audio is a RawAudio");
-                const floatBuffer = Buffer.from(audio.audioChannels[0].buffer);
-                console.log("buffer length: ", floatBuffer.length);
-
-                // Get the sample rate from the RawAudio object
-                const sampleRate = audio.sampleRate;
-
-                // Create a Float32Array view of the floatBuffer
-                const floatArray = new Float32Array(floatBuffer.buffer);
-
-                // Convert 32-bit float audio to 16-bit PCM
-                const pcmBuffer = new Int16Array(floatArray.length);
-                for (let i = 0; i < floatArray.length; i++) {
-                    pcmBuffer[i] = Math.round(floatArray[i] * 32767);
-                }
-
-                // Prepend WAV header to the buffer
-                const wavHeaderBuffer = getWavHeader(
-                    pcmBuffer.length * 2,
-                    sampleRate,
-                    1,
-                    16
-                );
-                const wavBuffer = Buffer.concat([
-                    wavHeaderBuffer,
-                    Buffer.from(pcmBuffer.buffer),
-                ]);
-
-                wavStream = Readable.from(wavBuffer);
-            } else {
-                throw new Error("Unsupported audio format");
-            }
-            return wavStream;
-        }
-        throw error; // Re-throw other errors
+        elizaLogger.error("ElevenLabs API error:", error);
+        throw error;
     }
 }
 
@@ -273,13 +178,25 @@ export class SpeechService extends Service implements ISpeechService {
         try {
             const { useVits } = await getVoiceSettings(runtime);
 
+            // Add debug logging
+            elizaLogger.debug("Generate speech settings:", {
+                useVits,
+                hasElevenLabsKey: !!runtime.getSetting("ELEVENLABS_XI_API_KEY"),
+                text: text.substring(0, 50) + "..." // Log first 50 chars of text
+            });
+
             if (useVits || !runtime.getSetting("ELEVENLABS_XI_API_KEY")) {
+                elizaLogger.debug("Using VITS because:", {
+                    useVits,
+                    noElevenLabsKey: !runtime.getSetting("ELEVENLABS_XI_API_KEY")
+                });
                 return await generateVitsAudio(runtime, text);
             }
 
             return await textToSpeech(runtime, text);
         } catch (error) {
             console.error("Speech generation error:", error);
+            elizaLogger.error("Falling back to VITS due to error:", error);
             return await generateVitsAudio(runtime, text);
         }
     }
